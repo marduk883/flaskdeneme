@@ -1,0 +1,26 @@
+{% extends "main.html" %}
+{% block title %}Şifre Sıfırla{% endblock title %}
+
+{% block body %}
+<form action="" method="post">
+    <center>
+    <br><br><br><br>
+    <label for="no">Ogrenci No:</label>
+    <input type="text" id="no" name="no">
+    <br><br>
+    <label for="no">Anne Kızlık Soyadı:</label>
+    <input type="text" id="kızlıksoyad" name="kızlıksoyad">
+    <br><br>
+    <label for="no">Baba adı:</label>
+    <input type="text" id="babaad" name="babaadi">
+    <br><br>
+    <label for="no">Tc Kimlik No:</label>
+    <input type="text" id="tc" name="tcno">
+    <br><br>
+    <label for="no">Telefon No:</label>
+    <input type="text" id="telefom" name="telno">
+    <br><br>
+    <button class="btn btn-outline-primary">Şifre Sıfırlama SMS'i gönder</button>
+</center>
+</form>
+{% endblock body %}

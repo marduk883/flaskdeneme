@@ -1,0 +1,43 @@
+<nav class="navbar navbar-expand-sm navbar-light" style="background-color:#121e2d;height:100px;">
+  <div class="container">
+        {% if session["girildi"]==True %}
+          <a class="navbar-brand"><img style="border-radius: 110px;" src="https://i.hizliresim.com/qskeq7e.jfif" height="80" /></a>
+        {% else %}
+        <a class="navbar-brand"><img style="border-radius: 110px;" src="https://i.hizliresim.com/gyxvn45.gif" height="80" /></a>
+        {% endif %}
+
+      <a class="navbar-brand" href="#">
+        <i class="fab fa-github fa-2x mx-3 ps-1"></i>
+      </a>
+    
+      <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        
+        <ul class="navbar-nav ml-auto mb-2 mb-lg-0">
+          {% if session["girildi"]==True %}
+          
+          <li class="nav-link">
+            <br>
+          </li>
+          <ul class="navbar-nav ml-auto mb-2 mb-lg-0">
+            <li class="nav-link">
+              <br><br>
+              
+            </li>
+        </ul>
+
+
+          
+          {% else %}
+          <ul class="navbar-nav ml-auto"></ul>
+            <li class="nav-link">
+              <a  style="color:white">Zonguldak Bülent Ecevit Üniversitesi Öğrenci Bilgi Sistemi</a>
+            </li>
+          {% endif %}
+          
+          
+        </ul>      
+        </ul>
+        
+      </div>
+    </div>
+  </nav>

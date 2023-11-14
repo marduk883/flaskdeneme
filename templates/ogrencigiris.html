@@ -1,0 +1,25 @@
+{% extends "main.html" %}
+{% block title %}ÖĞRENCİ GİRİŞ{% endblock title %}
+
+{% block body %}
+{% from "formyardimci.html" import render_field %}
+<br><br><br><br><br><br><br><br>
+<form action="#" method="post" style="margin-right:70px;;">
+<center>
+    {{ render_field(form.ogrencino) }}
+    {{ render_field(form.sifre) }}
+    <hr>
+    <a href="/sifresifirla" style="text-decoration:none;color: black;">Şifre Sıfırla</a>
+    <hr>
+    <button type="submit" class="btn btn-outline-secondary">Giriş Yap</button>
+</center>
+    
+</form>
+<center>
+    <br><br><br>
+    <p>  2023-2024 Güz Yarıyılında  "Diş Hekimliği Fakültesi, Tıp Fakültesi 1., 2., 3. sınıf öğrencileri ile Sağlık Bilimleri Fakültesinin 4. Sınıf  Öğrencileri 
+        11.09.2023 saat 10.00 - 15.09.2023 23:59 tarihleri arasında ders alma işlemi yapacaklardır.
+        Diğer bölüm öğrencilerinin ders alma işlemleri 25.09.2023 saat 10:00 ile 29.09.2023 23:59 tarihleri arasında yapılacaktır.
+        Yeni kayıtlı öğrenciler OBS şifresi oluşturmak için "Şifre Sıfırla" butonunu kullanabilirler.</p>
+</center>
+{% endblock body %}

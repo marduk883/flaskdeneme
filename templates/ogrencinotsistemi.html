@@ -1,0 +1,42 @@
+{% extends "main.html" %}
+{% block style %}
+<style>
+    body{background-color:#121e2d;}
+</style>
+{% endblock style %}
+
+
+
+{% block body %}
+
+<div class="kisimler">
+            <a class="navbar-brand" style="padding-left: 20px;color:cornsilk;text-decoration: none;">{{session["username"]}}</a>
+            <br>
+            <p style="padding-left: 20px;color: antiquewhite;">Öğrenci No:1206100012</p>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/derskayit">Ders Kayıt</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/notbilgisi">Not Bilgisi</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/mufredatdurumu">Müfredat Durumu</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/stajbasvur">Staj Başvurusu</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/devamsizlik">Devamsızlık Durumu</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/yazokulu">Yaz Okulu Başvurusu</a>
+            <br>
+            <hr style="color: white;">
+            <a class="navbar-brand" style="padding-left: 20px;color: white;text-decoration: none;" href="/donemort">Dönem Ortalamaları</a>
+            <br>
+            <hr style="color: white;">
+            <a  class="navbar-brand" href="/cikis" style="border-color:white;padding: 20px;"><button class="btn btn-outline-light">Çıkış</button></a>
+          
+</div>
+
+{% endblock body %}
