@@ -1,0 +1,1379 @@
+CREATE OR REPLACE PROCEDURE LXIR.RPT_0209(
+
+pValueDateMin DATE,
+
+pValueDateMax DATE,
+
+pChannels_Id IN INT,
+
+pProducers_Code IN INT,
+
+pProducts_Id IN INT,
+
+pBranches_Id IN INT,
+
+PpolicyNo IN INT,
+
+pXYZ IN VARCHAR2,
+
+pTypeofReport IN VARCHAR2,
+
+pProductGrps_Id IN INT,
+
+pOldNew IN VARCHAR2,
+
+/*pPaymentDateMin DATE,
+
+pPaymentDateMax DATE,*/
+
+pZones_Id INT,
+
+pFesih IN VARCHAR2,        
+
+pIsDirect IN VARCHAR2,
+
+qryTitle OUT Lxir_Data.lxir_cur_type,
+
+qryHeader OUT Lxir_Data.lxir_cur_type,
+
+qrySumHeader OUT Lxir_Data.lxir_cur_type,
+
+qryData OUT Lxir_Data.lxir_cur_type,
+
+qrySumData OUT Lxir_Data.lxir_cur_type)
+
+IS
+
+vProducers_Id Producers.Producers_Id%TYPE;
+
+ 
+
+
+CURSOR  qryPolicies IS
+
+SELECT Tblpol.Policies_Id, Tblpol.Renewals_Id, Tblpol.Groups_Id,
+
+                Tblpol.Policyno, tblPP.Producers_Id, Tblpro.Branches_Id,
+
+                Tblpol.Poltrans_Id_Last, Tblpol.Products_Id,
+
+                Tblpol.Policystates_Id_La,
+
+                Years(Trunc(SYSDATE), Tblpol.Startdate) + 1 AS Polyear               
+
+FROM Policies Tblpol
+
+INNER JOIN Polproducers Tblpp ON
+
+Tblpol.Poltrans_Id_Last = Tblpp.Poltrans_Id
+
+INNER JOIN Products Tblpro ON
+
+Tblpro.Products_Id = Tblpol.Products_Id
+
+INNER JOIN Producers Pro ON
+
+Pro.Producers_Id = Tblpp.Producers_Id
+
+WHERE Tblpol.Products_Id IN (SELECT pin.Products_Id FROM Productsingrps pin WHERE pin.Productgrps_Id = Pproductgrps_Id)
+
+AND Pro.Producers_Code = Nvl(Pproducers_Code, Pro.Producers_Code)
+
+AND (Pro.Zones_Id = Pzones_Id OR Pzones_Id IS NULL)
+
+AND Tblpro.Branches_Id = Coalesce(Pbranches_Id, Tblpro.Branches_Id)
+
+AND Tblpol.Policyno = Coalesce(Ppolicyno, Policyno)
+
+AND Tblpol.Policystates_Id_La >= 3
+
+AND (Pfesih = 'T' OR (Pfesih = 'N' AND Nvl(Pro.Roleendreason, 'N') != 'F') OR  (Pfesih = 'Y' AND Nvl(Pro.Roleendreason, 'N') = 'F'))
+
+AND EXISTS (SELECT pc.Producers_Id  FROM Producers_Channels pc WHERE pc.Channels_Id = Coalesce(Pchannels_Id, pc.Channels_Id)
+
+            AND pc.Producers_Id = Tblpp.Producers_Id)
+
+AND (Pisdirect = 'T' OR Pisdirect = (SELECT ch.Isdirect FROM Channels ch WHERE ch.Channels_Id = Pro.Channels_Id))
+
+AND EXISTS(SELECT  tblCp.Commpayables_Id
+
+           FROM Commpayables Tblcp
+
+           INNER JOIN Polbills p
+
+           ON p.Polbills_Id=Tblcp.Polbills_Id
+
+           WHERE TblPol.Policies_Id=p.Policies_Id
+
+           AND tblPol.Groups_Id=p.Groups_Id
+
+           AND tblPol.Renewals_Id=p.Renewals_Id
+
+           AND p.Isavalidpol='Y'
+
+           AND Pro.Producers_Id=TblCp.Producers_Id
+
+           AND Tblcp.Valuedate BETWEEN Pvaluedatemin AND Pvaluedatemax);
+
+ 
+
+TqryPolicies qryPolicies%ROWTYPE;
+
+TYPE TablePolicies IS TABLE OF qryPolicies%ROWTYPE INDEX BY BINARY_INTEGER;
+
+TTablePolicies TablePolicies;
+
+MaxFetchRows NUMBER:=20;
+
+ 
+
+ 
+
+ 
+
+PROCEDURE RunForOneRecord(pPolicies_Id Policies.Policies_Id%TYPE,
+
+pRenewals_Id Policies.Renewals_Id%TYPE ,
+
+pGroups_Id Policies.GRoups_Id%TYPE,
+
+pProducers_Id Producers.Producers_Id%TYPE,
+
+pPolTrans_Id PolTransactions.PolTrans_Id%TYPE,
+
+vProducts_Id Products.Products_Id%TYPE,
+
+vPolicyNo Policies.PolicyNo%TYPE,
+
+vPolYear INTEGER,
+
+vBranches_Id  Products.Branches_Id%TYPE,
+
+vPolicyStates_Id_La Policies.PolicyStates_Id_La%TYPE) IS
+
+I NUMBER;
+
+vBillingMinDate DATE;
+
+vBillingMaxDate DATE :=TRUNC(SYSDATE);
+
+vUnits_id_local Units.Units_id%TYPE;
+
+CURSOR qryCommPayables IS
+
+SELECT CommPayables_Id,UnitRound(tblCP.Amount,tblCp.Units_id) AS Amount,
+
+       UnitRound(tblCP.Amount_Local,vUnits_id_local) AS amount_local,
+
+       tblCP.Units_Id,tblPB.BillingDate,tblCp.ValueDate,tblCp.Vouchers_id,TBLPB.ISAFOUNDBILL,tblPB.PolBills_Id,tblCP.POLBILLDETAILS_ID,tblCP.PRODUCERS_ID
+
+FROM CommPayables tblCP
+
+INNER JOIN PolBills tblPB ON
+
+tblCP.PolBills_Id=tblPB.PolBills_Id
+
+/*
+
+INNER JOIN Policies tblPol ON
+
+tblPol.Policies_id=tblPb.policies_id
+
+AND tblPol.Groups_id=tblPB.Groups_id
+
+AND tblPol.Renewals_id=tblPB.Renewals_id
+
+*/
+
+--LEFT JOIN ACCOUNTS tblAcc ON
+
+--tblCp.Payments_id_Cause=tblAcc.Accounts_id
+
+WHERE tblPB.Policies_Id = pPolicies_Id
+
+AND tblPB.Renewals_Id = pRenewals_Id
+
+AND tblPB.Groups_Id = pGroups_Id
+
+AND tblCP.Producers_Id = pProducers_Id
+
+AND tblCP.ValueDate BETWEEN pValueDateMin AND pValueDateMax
+
+AND tblPB.BillingDate BETWEEN vBillingMinDate AND vBillingMaxDate
+
+AND tblPB.IsAValidPol='Y'
+
+--AND NVL(tblAcc.Instruments_id,'A')<>'I'
+
+ORDER BY tblPB.BillingDate,tblCP.ValueDate;
+
+ 
+
+TqryCommPayables qryCommPayables%ROWTYPE;
+
+vAmountPayed ACCOUNTS.Amount%TYPE;
+
+vAmountPayed_Local ACCOUNTS.Amount%TYPE;
+
+vTotalComm ACCOUNTS.Amount%TYPE :=0;
+
+vTotalCommLoc ACCOUNTS.Amount%TYPE :=0;
+
+vTotalPayedComm ACCOUNTS.Amount%TYPE :=0;
+
+vTotalPayedCommLoc ACCOUNTS.Amount%TYPE :=0;
+
+vOldNew VARCHAR2(10);
+
+vInserted BOOLEAN := FALSE;
+
+vPremium ACCOUNTS.Amount%TYPE :=0;
+
+vPremiumPayed ACCOUNTS.Amount%TYPE :=0;
+
+vPremiumNotPayed ACCOUNTS.Amount%TYPE :=0;
+
+vZones_Name Zones.Zones_Name%TYPE;
+
+vTempBillingDate DATE;
+
+vTempValueDate DATE;
+
+vTempUnits_Id VARCHAR2(3);
+
+vTempBillingDate2 DATE;
+
+vTempValueDate2 DATE;
+
+vProducers_Code NUMBER(11);
+
+vProducers_Name Persons.Persons_Name%TYPE;
+
+vEProducers_Code NUMBER(11);
+
+vProducts_Name Products.Products_Name%TYPE;
+
+vInsureds_Name Persons.Persons_Name%TYPE;
+
+vInsurers_Name Persons.Persons_Name%TYPE;
+
+vPayers_Name Persons.Persons_Name%TYPE;
+
+vMainGroup_Name Persons.Persons_Name%TYPE;
+
+vProcessCnt INTEGER :=0;
+
+vRoleEndReason VARCHAR2(20);
+
+vChannels_Name VARCHAR2(40);
+
+vBILLINGTYPES_ID VARCHAR2(1);
+
+vCommission NUMBER(22,6);
+
+vBillingTypes_Name VARCHAR2(100);
+
+vInsureds_Citizenshipno Persons.Citizenshipno%TYPE;
+
+vInsurers_Citizenshipno Persons.Citizenshipno%TYPE;
+
+vKomisyonHakedisTip VARCHAR2(50);
+
+BEGIN
+
+    SELECT Units_id_local
+
+    INTO vUnits_id_local
+
+    FROM vDefaults;
+
+    SELECT Zones_Name INTO vZones_Name
+
+    FROM Zones
+
+    WHERE Zones_Id=(SELECT Zones_id FROM Producers WHERE producers_id=pProducers_id);
+
+    
+
+    SELECT Producers_Code,PerRoles_Name(Producers_Id),EProducers_Code,
+
+           CASE WHEN Roleendreason='T' THEN 'Transfer' WHEN Roleendreason='F' THEN 'Fesih (Komisyonsuz)' WHEN Roleendreason='K' THEN 'Fesih (Komisyonlu)' ELSE '' END,
+
+           Channels_Name(Channels_id)
+
+    INTO vProducers_Code,vProducers_Name,vEProducers_Code,vRoleEndReason,vChannels_Name
+
+    FROM Producers
+
+    WHERE Producers_Id=pProducers_Id;
+
+ 
+
+ 
+
+ 
+
+  BEGIN   
+
+      vInsureds_Name:=Insureds_Name(pPolTrans_Id);
+
+      vInsureds_Citizenshipno := getcitizenshipno(insureds_id(pPolTrans_Id));
+
+      vInsurers_Name := insurers_name(pPolTrans_Id);
+
+      vInsurers_Citizenshipno := nvl(getcitizenshipno(insurers_id(pPolTrans_Id)),gettaxno(insurers_id(pPolTrans_Id)));
+
+      vPayers_Name := persons_name(payers_id(pPolTrans_Id));
+
+    EXCEPTION
+
+      WHEN NO_DATA_FOUND THEN
+
+        vInsureds_Name:='';
+
+        vInsureds_Citizenshipno := '';
+
+        vInsurers_Name := '';
+
+        vInsurers_Citizenshipno := '';
+
+        vPayers_Name := '';
+
+    END;   
+
+    
+
+    BEGIN
+
+       vMainGroup_Name := maingroup_name(pPolTrans_Id);
+
+    EXCEPTION WHEN OTHERS THEN
+
+       vMainGroup_Name := '';
+
+    END; 
+
+    
+
+    
+
+    SELECT Products_Name INTO vProducts_Name
+
+    FROM Products
+
+    WHERE Products_Id=vProducts_Id;
+
+ 
+
+  BEGIN        
+
+    Select comm.commision*100 INTO vCommission
+
+    From commrateexceptions comm
+
+    Where comm.poltrans_id = pPolTrans_Id;
+
+  EXCEPTION
+
+    WHEN NO_DATA_FOUND THEN
+
+    vCommission:=NULL;
+
+    WHEN Too_Many_rows THEN
+
+    dbms_output.put_line('Birden fazla komisyon bilgisi var!');
+
+  END;    
+
+ 
+
+    SELECT MIN(BillingDate),MAX(billingdate)
+
+      INTO vBillingMinDate,vBillingMaxDate
+
+      FROM PolBills tblPB
+
+     WHERE tblPB.Policies_Id = pPolicies_Id
+
+       AND tblPB.Renewals_Id = pRenewals_Id
+
+       AND tblPB.Groups_Id = pGroups_Id;
+
+ 
+
+    IF pOldNew='E' THEN
+
+      SELECT MIN(BillingDate) INTO vBillingMinDate
+
+      FROM PolBills tblPB
+
+      WHERE tblPB.Policies_Id = pPolicies_Id
+
+      AND tblPB.Renewals_Id = pRenewals_Id
+
+      AND tblPB.Groups_Id = pGroups_Id
+
+      AND tblPB.BillingDate > vBillingMinDate;
+
+    ELSIF pOldNew='Y' THEN
+
+      vBillingMaxDate:=vBillingMinDate;
+
+    END IF;    
+
+ 
+
+    FOR TqryCommPayables IN qryCommPayables LOOP
+
+   
+
+    BEGIN
+
+        select CASE WHEN PBC.ISONPAYMENT='Y' THEN 'TAHSİLATA BAĞLI' ELSE 'TAHAKKUKA BAĞLI' END  INTO vKomisyonHakedisTip
+
+          from LXIR.POLBILLCOMMS pbc
+
+        where PBC.POLBILLS_ID=  TqryCommPayables.PolBills_Id
+
+           AND PBC.POLBILLDETAILS_ID=TqryCommPayables.POLBILLDETAILS_ID
+
+           AND PBC.PRODUCERS_ID= TqryCommPayables.PRODUCERS_ID;
+
+     EXCEPTION WHEN OTHERS THEN
+
+         vKomisyonHakedisTip:='';
+
+    END;
+
+   
+
+--      vInserted:=FALSE;
+
+      SELECT SUM(UnitRound(COALESCE(Amount,0),units_id)),SUM(UnitRound(COALESCE(Amount_Local,0),vUnits_id_local)) INTO vAmountPayed,vAmountPayed_Local
+
+      FROM EncashedCommisions
+
+      WHERE CommPayables_Id=TqryCommPayables.CommPayables_Id;
+
+ 
+
+      IF (vTempBillingDate<>TqryCommPayables.BillingDate OR vTempValueDate<>TqryCommPayables.ValueDate) AND vProcessCnt <> 0 THEN
+
+         vPremium:= POLPREMBYBILLINGDATE(pPolicies_Id,pGroups_Id,pRenewals_Id,TqryCommPayables.BillingDate);     
+
+         vPremiumPayed:=PREMPAYEDBYBILLINGDATE(pPolicies_Id,pGroups_Id,pRenewals_Id,TqryCommPayables.BillingDate);
+
+         IF pOldNew NOT IN('Y','E') THEN
+
+           vOldNew:=CASE WHEN vBillingMinDate=TqryCommPayables.BillingDate THEN 'Yeni İş' ELSE 'Eski İş' END;
+
+         ELSE 
+
+           vOldNew:=CASE WHEN pOldNew='Y' THEN 'Yeni İş' ELSE 'Eski İş' END;
+
+         END IF; 
+
+         
+
+         vPremiumNotPayed := vPremium - vPremiumPayed;
+
+        
+
+       --  select NVL(BILLINGTYPES_NAME(PB.ISAFOUNDBILL),NULL)  INTO vBillingTypes_Name from LXIR.POLBILLS pb
+
+       --  where PB.POLBILLS_ID= TqryCommPayables.PolBills_Id;
+
+        
+
+         INSERT INTO TMP_RPT_0209DATA
+
+         (policies_id, renewals_id, groups_id, billingdate, valuedate,premium,
+
+          premiumpayed,PREMIUMNOTPAYED,commision,commision_local,units_id,producers_id,oldnew,
+
+          Zones_Name,PayedCommision,PayedCommision_Local,Producers_Name,Producers_Code,
+
+          EProducers_Code,Products_id,Products_Name,Policyno,Insureds_Name,
+
+          PolicyStates_Id_la,PolYear,RoleEndReason,Vouchers_id,Channels_name, Branches_Id,BILLINGTYPES_ID,
+
+          Commission,BillingTypes_Name,Insurers_Citizenshipno,Insureds_Citizenshipno,payers_name,
+
+          insurers_name,maingroup_name,KOMISYON_HAKEDIS_TIP,
+
+          group_of_contract)
+
+         VALUES
+
+          (pPolicies_Id,pRenewals_Id,pGroups_Id,vTempBillingDate,vTempValueDate,
+
+           vPremium,vPremiumPayed, vPremiumNotPayed ,vTotalComm,vTotalCommLoc,vTempUnits_Id,
+
+           pProducers_Id,vOldNew,vZones_Name,vTotalPayedComm,vTotalPayedCommLoc,
+
+           vProducers_Name,vProducers_Code,vEProducers_Code,vProducts_id,
+
+           vProducts_Name,vPolicyno,vInsureds_Name,vPolicyStates_Id_la,
+
+           vPolYear,vRoleEndReason,TqryCommPayables.Vouchers_id,vChannels_name, vBranches_Id,TqryCommPayables.ISAFOUNDBILL,
+
+           vCommission,vBillingTypes_Name,vInsurers_Citizenshipno,vInsureds_Citizenshipno,vPayers_Name,vInsurers_Name,
+
+           vMainGroup_Name,vKomisyonHakedisTip,
+
+           nvl(Pck_IFRS17_PARAMETERS.IFRS17_GOC_FORPOLICIES(pPolicies_Id, pGroups_Id, pRenewals_Id, vTempBillingDate,1),0));
+
+          vTotalComm:=0;
+
+          vTotalCommLoc:=0;
+
+          vTotalPayedComm:=0;
+
+          vTotalPayedCommLoc:=0;
+
+--          vInserted:=TRUE;
+
+      END IF;
+
+      vTempBillingDate:=TqryCommPayables.BillingDate;
+
+      vTempValueDate:=TqryCommPayables.ValueDate;
+
+      vTempUnits_Id:=TqryCommPayables.Units_Id;
+
+      vProcessCnt:=vProcessCnt+1;
+
+      vTotalComm:=vTotalComm + COALESCE(TqryCommPayables.Amount,0);
+
+      vTotalCommLoc:=vTotalCommLoc + COALESCE(TqryCommPayables.Amount_Local,0);
+
+      vTotalPayedComm:=vTotalPayedComm+COALESCE(vAmountPayed,0);
+
+      vTotalPayedCommLoc:=vTotalPayedCommLoc+COALESCE(vAmountPayed_Local,0);
+
+    END LOOP;
+
+--    IF NOT vInserted THEN
+
+     vPremium:= POLPREMBYBILLINGDATE(pPolicies_Id,pGroups_Id,pRenewals_Id,vTempBillingDate);     
+
+     vPremiumPayed:=PREMPAYEDBYBILLINGDATE(pPolicies_Id,pGroups_Id,pRenewals_Id,vTempBillingDate);
+
+     IF pOldNew NOT IN('Y','E') THEN
+
+       vOldNew:=CASE WHEN vBillingMinDate=vTempBillingDate THEN 'Yeni İş' ELSE 'Eski İş' END;
+
+     ELSE 
+
+       vOldNew:=CASE WHEN pOldNew ='Y' THEN 'Yeni İş' ELSE 'Eski İş' END;
+
+     END IF; 
+
+     
+
+     vPremiumNotPayed := vPremium - vPremiumPayed;
+
+    
+
+   --    select NVL(BILLINGTYPES_NAME(PB.ISAFOUNDBILL),NULL)  INTO vBillingTypes_Name from LXIR.POLBILLS pb
+
+     --    where PB.POLBILLS_ID= TqryCommPayables.PolBills_Id;
+
+        
+
+     
+
+     INSERT INTO TMP_RPT_0209DATA
+
+     (policies_id, renewals_id, groups_id, billingdate, valuedate,
+
+      premium, premiumpayed, premiumnotpayed ,commision,commision_local,units_id,producers_id,
+
+      oldnew,Zones_Name,PayedCommision,PayedCommision_Local,Producers_Name,
+
+      Producers_Code,EProducers_Code,Products_id,Products_Name,Policyno,
+
+      Insureds_Name,PolicyStates_Id_la,PolYear,RoleEndReason,Vouchers_id,Channels_name,Branches_Id,Commission,BillingTypes_Name,Insurers_Citizenshipno,
+
+      Insureds_Citizenshipno,payers_name,insurers_name,maingroup_name,KOMISYON_HAKEDIS_TIP,
+
+      group_of_contract)
+
+      VALUES
+
+      (pPolicies_Id,pRenewals_Id,pGroups_Id,vTempBillingDate,vTempValueDate,
+
+       vPremium,vPremiumPayed,vPremiumNotPayed,vTotalComm,vTotalCommLoc,vTempUnits_Id,
+
+       pProducers_Id,vOldNew,vZones_Name,vTotalPayedComm,vTotalPayedCommLoc,
+
+       vProducers_Name,vProducers_Code,vEProducers_Code,vProducts_id,
+
+       vProducts_Name,vPolicyno,vInsureds_Name,vPolicyStates_Id_la,vPolYear,
+
+       vRoleEndReason,TqryCommPayables.Vouchers_id,vChannels_name, vBranches_Id,vCommission,vBillingTypes_Name,vInsurers_Citizenshipno,
+
+       vInsureds_Citizenshipno,vPayers_Name,vInsurers_Name,vMainGroup_Name,vKomisyonHakedisTip,
+
+       nvl(Pck_IFRS17_PARAMETERS.IFRS17_GOC_FORPOLICIES(pPolicies_Id, pGroups_Id, pRenewals_Id, vTempBillingDate,1),0));
+
+/*      vTotalComm:=0;
+
+      vTotalCommLoc:=0;
+
+      vTotalPayedComm:=0;
+
+      vTotalPayedCommLoc:=0;
+
+      vInserted:=TRUE;*/
+
+--   END IF;
+
+
+END;
+
+ 
+
+BEGIN
+
+/* ************************************************************* */
+
+  /*Acente Komisyon  Listesi                                         */
+
+  /* ************************************************************* */
+
+ 
+
+  IF pProducers_Code IS NOT NULL THEN
+
+    SELECT MAX(Producers_Id) INTO vProducers_Id
+
+    FROM Producers
+
+    WHERE Producers_code=pProducers_Code;
+
+    IF Coalesce(vProducers_Id,0) = 0 THEN
+
+      Raise_Et(-20000,'Acente partaj kodu hatalı.');
+
+    END IF;
+
+  END IF;
+
+ 
+
+ 
+
+OPEN qryPolicies;
+
+LOOP
+
+ FETCH  qryPolicies INTO TqryPolicies;
+
+EXIT WHEN qryPolicies%NOTFOUND;
+
+   RunForOneRecord(TqryPolicies.Policies_Id,TqryPolicies.Renewals_Id,TqryPolicies.Groups_Id,
+
+                   TqryPolicies.Producers_Id,TqryPolicies.PolTrans_Id_Last,TqryPolicies.Products_Id,
+
+                   TqryPolicies.PolicyNo,TqryPolicies.PolYear, TqryPolicies.Branches_Id,
+
+                   TqryPolicies.PolicyStates_Id_La);
+
+END LOOP;
+
+ CLOSE qryPolicies;
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+     
+
+  IF pOldNew<>'T' THEN
+
+    DELETE FROM  TMP_RPT_0209DATA WHERE  (pOldNew='Y' AND OldNew='Eski İş') OR (pOldNew='E' AND OldNew='Yeni İş');
+
+  END IF;
+
+ 
+
+  OPEN qryTitle  FOR
+
+    SELECT '_TITLE_',Reports_Name || CASE WHEN pTypeofReport = 'D' THEN '(Detay)' ELSE '(İcmal)' END
+
+      FROM Reports WHERE Reports_Id=209;
+
+ 
+
+  OPEN qrySumHeader  FOR SELECT '_SUMMARYHEADER01_',
+
+  'P.B.',
+
+  'Hak Edilen  Komisyon  ',
+
+  'Hak Edilen  Komisyon TRL ',
+
+  'Ödenen  Komisyon ',
+
+  'Ödenen Komisyon TRL ',
+
+  'Ödenecek  Komisyon ',
+
+  'Ödenecek  Komisyon TRL' FROM DUAL ;
+
+ 
+
+  OPEN qrySumData FOR
+
+    SELECT Units_Id,
+
+           SUM(Coalesce(Commision,0)),
+
+           SUM(Coalesce(Commision_Local,0)),
+
+           SUM(Coalesce(PayedCommision,0)),
+
+           SUM(Coalesce(PayedCommision_Local,0)),
+
+           SUM(Coalesce(Commision,0) + Coalesce(PayedCommision,0)),
+
+           SUM(Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0))
+
+    FROM TMP_RPT_0209DATA
+
+    GROUP BY Units_Id;
+
+ 
+
+  OPEN qryData FOR
+
+    SELECT ' ' FROM dual;
+
+  IF pTypeofReport = 'D' THEN
+
+      OPEN qryHeader  FOR SELECT '_HEADER_',
+
+      'Bölge',
+
+      'Branş',
+
+      'Branş Adı',
+
+      'Poliçe No',
+
+      'Sertifika No',
+
+      'Yenileme No',
+
+      'Poliçe Son Durum',
+
+      'Poliçe Yaşı',
+
+      'Sigortalı Adı',
+
+      'Sigortalı Kimlik No',
+
+      'Ödeyen Adı',
+
+      'Sigorta Ettiren Adı',
+
+      'Sigortalı Ettiren TCKN/VKN',
+
+      'Ana Müşteri Adı',
+
+      'Satış Kanalı',
+
+      'Partaj Kodu','Vision Partaj Kodu',
+
+      'Üretim Kaynağı',
+
+      'Partaj Durumu',
+
+      'Ürün Kodu',
+
+      'Ürün',
+
+      'P.B.',
+
+      'Tahakkuk Tarihi',
+
+      'Primi',
+
+      'Ödenen Prim',
+
+      'Prim Borcu',
+
+      'Hak Ediş Tarih ',
+
+      'Hak Edilen  Komisyon  ',
+
+      'Hak Edilen  Komisyon TRL ',
+
+      'Ödenen  Komisyon ',
+
+      'Ödenen Komisyon TRL ',
+
+      'Ödenecek  Komisyon ',
+
+      'Ödenecek  Komisyon TRL',
+
+      'Komisyon Oranı',
+
+      'Eski / Yeni İş',
+
+      'Ana Üretim Kaynağı',
+
+      'Ana Ü.K.Bölgesi',
+
+    '2.Seviye Üretim Kaynağı',
+
+    'LXIR Fiş Referansı',
+
+      'Vade Tipi',
+
+     'Komisyon Hakediş Tipi'
+
+     FROM DUAL ;
+
+       IF pXYZ='X' THEN 
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Policyno,
+
+                Groups_id,
+
+                Renewals_id,
+
+                PolicyStates_Name(PolicyStates_id_La),
+
+                PolYear,
+
+                Insureds_Name,
+
+                Insureds_Citizenshipno,
+
+                Payers_Name,
+
+                Insurers_Name,
+
+                Insurers_Citizenshipno,
+
+                Maingroup_Name,               
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                RoleEndReason,
+
+                Products_id,
+
+                Products_Name,
+
+                Units_Id,
+
+                billingdate,
+
+                Premium,
+
+                PremiumPayed,
+
+                PremiumNotPayed,
+
+                ValueDate,
+
+                Coalesce(Commision,0),
+
+                Coalesce(Commision_Local,0),
+
+                Coalesce(PayedCommision,0),
+
+                Coalesce(PayedCommision_Local,0),
+
+                Coalesce(Commision,0) + Coalesce(PayedCommision,0),
+
+                Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0),
+
+                Commission,oldNew,
+
+                MainProducers_Code(Policies_Id,Renewals_Id,Groups_Id),Zones_Name(MainProducerZones_id(Policies_Id,Renewals_Id,Groups_Id)),
+
+        (SELECT PRODUCERS_CODE FROM PRODUCERS tblPro
+
+        INNER JOIN POLPRODUCERS tblPolPro
+
+        ON tblPro.PRODUCERS_ID=tblPolPro.PRODUCERS_ID AND tblPolPro.PRODUCTIONLEVEL=2
+
+        INNER JOIN POLICIES tblPol
+
+        ON tblPolPro.POLTRANS_ID=tblPol.POLTRANS_ID_LAST
+
+        WHERE tblPol.Policies_Id=a.Policies_Id
+
+        AND tblPol.Groups_Id=a.Groups_Id
+
+        AND tblPol.Renewals_Id=a.Renewals_Id),Vouchers_id,
+
+               BillingTypes_Name,
+
+               KOMISYON_HAKEDIS_TIP
+
+         FROM TMP_RPT_0209DATA a
+
+         WHERE Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0)<>0
+
+         ORDER BY Channels_Name,Producers_Code,Policyno,Units_Id;
+
+--LXIR.BILLINGTYPES
+
+       ELSIF pXYZ='Y' THEN 
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Policyno,
+
+                Groups_id,
+
+                Renewals_id,
+
+                PolicyStates_Name(PolicyStates_id_la),
+
+                PolYear,
+
+                Insureds_Name,
+
+                Insureds_Citizenshipno,
+
+                Payers_Name,
+
+                Insurers_Name,
+
+                Insurers_Citizenshipno,
+
+                Maingroup_Name,
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                RoleEndReason,
+
+                Products_id,
+
+                Products_Name,
+
+                Units_Id,
+
+                billingdate,
+
+                Premium,
+
+                PremiumPayed,
+
+                PremiumNotPayed,
+
+                ValueDate,
+
+                Coalesce(Commision,0),
+
+                Coalesce(Commision_Local,0),
+
+                Coalesce(PayedCommision,0),
+
+                Coalesce(PayedCommision_Local,0),
+
+                Coalesce(Commision,0) + Coalesce(PayedCommision,0),
+
+                Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0),
+
+                Commission,oldNew,
+
+                MainProducers_Code(Policies_Id,Renewals_Id,Groups_Id),Zones_Name(MainProducerZones_id(Policies_Id,Renewals_Id,Groups_Id)),
+
+        (SELECT PRODUCERS_CODE FROM PRODUCERS tblPro
+
+        INNER JOIN POLPRODUCERS tblPolPro
+
+        ON tblPro.PRODUCERS_ID=tblPolPro.PRODUCERS_ID AND tblPolPro.PRODUCTIONLEVEL=2
+
+        INNER JOIN POLICIES tblPol
+
+        ON tblPolPro.POLTRANS_ID=tblPol.POLTRANS_ID_LAST
+
+        WHERE tblPol.Policies_Id=a.Policies_Id
+
+        AND tblPol.Groups_Id=a.Groups_Id
+
+        AND tblPol.Renewals_Id=a.Renewals_Id),Vouchers_id, BillingTypes_Name,KOMISYON_HAKEDIS_TIP
+
+         FROM TMP_RPT_0209DATA a
+
+         WHERE Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0)=0
+
+         ORDER BY Channels_Name,Producers_Code,Policyno,Units_Id;
+
+       ELSE
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Policyno,
+
+                Groups_id,
+
+                Renewals_id,
+
+                PolicyStates_Name(PolicyStates_id_la),
+
+                PolYear,
+
+                Insureds_Name,
+
+                Insureds_Citizenshipno,
+
+                Payers_Name,
+
+                Insurers_Name,
+
+                Insurers_Citizenshipno,
+
+                Maingroup_Name,
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                RoleEndReason,
+
+                Products_id,
+
+                Products_Name,
+
+                Units_Id,
+
+                billingdate,
+
+                Premium,
+
+                PremiumPayed,
+
+                PremiumNotPayed,
+
+                ValueDate,
+
+                Coalesce(Commision,0),
+
+                Coalesce(Commision_Local,0),
+
+                Coalesce(PayedCommision,0),
+
+                Coalesce(PayedCommision_Local,0),
+
+                Coalesce(Commision,0) + Coalesce(PayedCommision,0),
+
+                Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0),
+
+                Commission,oldNew,
+
+                MainProducers_Code(Policies_Id,Renewals_Id,Groups_Id),Zones_Name(MainProducerZones_id(Policies_Id,Renewals_Id,Groups_Id)),
+
+        (SELECT PRODUCERS_CODE FROM PRODUCERS tblPro
+
+        INNER JOIN POLPRODUCERS tblPolPro
+
+        ON tblPro.PRODUCERS_ID=tblPolPro.PRODUCERS_ID AND tblPolPro.PRODUCTIONLEVEL=2
+
+        INNER JOIN POLICIES tblPol
+
+        ON tblPolPro.POLTRANS_ID=tblPol.POLTRANS_ID_LAST
+
+        WHERE tblPol.Policies_Id=a.Policies_Id
+
+        AND tblPol.Groups_Id=a.Groups_Id
+
+        AND tblPol.Renewals_Id=a.Renewals_Id),Vouchers_id,BillingTypes_Name ,KOMISYON_HAKEDIS_TIP
+
+         FROM TMP_RPT_0209DATA a
+
+         ORDER BY Channels_Name,Producers_Code,Policyno,Units_Id;
+
+       END IF;              
+
+   ELSE
+
+      OPEN qryHeader  FOR SELECT '_HEADER_',
+
+      'Bölge','Branş', 'Branş Adı', 'Satış Kanalı',
+
+      'Partaj Kodu','Vision Partaj Kodu',
+
+      'Üretim Kaynağı',
+
+      'Partaj Durumu',
+
+      'Ürün Kodu',
+
+      'Ürün',
+
+      'P.B.',
+
+      'Hak Edilen  Komisyon  ',
+
+      'Hak Edilen  Komisyon TRL ',
+
+      'Ödenen  Komisyon ',
+
+      'Ödenen Komisyon TRL ',
+
+      'Ödenecek Komisyon ',
+
+      'Ödenecek Komisyon TRL',
+
+      'Eski / Yeni İş' FROM DUAL ;
+
+     
+
+       IF pXYZ='X' THEN
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                Products_id,
+
+                Products_Name,
+
+                RoleEndReason,
+
+                Units_Id,
+
+                SUM(Coalesce(Commision,0)),
+
+                SUM(Coalesce(Commision_Local,0)),
+
+                SUM(Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(PayedCommision_Local,0)),
+
+                SUM(Coalesce(Commision,0) + Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0)),oldNew
+
+         FROM TMP_RPT_0209DATA tblRpt
+
+         WHERE Coalesce(Commision,0) + Coalesce(PayedCommision,0)<>0
+
+         GROUP BY  Zones_Name,
+
+                   Branches_Id,
+
+                   branches_name(Branches_Id),
+
+                   Channels_Name,
+
+                   Producers_Code,EProducers_Code,
+
+                   Products_id,
+
+                   Products_Name,
+
+                   Producers_Name,
+
+                   RoleEndReason,
+
+                   Units_Id,
+
+--                ValueDate,
+
+                   OldNew
+
+         ORDER BY Zones_Name,Channels_Name,Producers_Code,Units_Id;
+
+       ELSIF pXYZ='Y' THEN
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                RoleEndReason,
+
+                Products_id,
+
+                Products_Name,
+
+                Units_Id,
+
+--                ValueDate,
+
+                SUM(Coalesce(Commision,0)),
+
+                SUM(Coalesce(Commision_Local,0)),
+
+                SUM(Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(PayedCommision_Local,0)),
+
+                SUM(Coalesce(Commision,0) + Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0)),oldNew
+
+         FROM TMP_RPT_0209DATA tblRpt
+
+         WHERE Coalesce(Commision,0) + Coalesce(PayedCommision,0)=0
+
+         GROUP BY Zones_Name,
+
+                  Branches_Id,
+
+                  branches_name(Branches_Id),
+
+                  Channels_Name,
+
+                  Producers_Code,EProducers_Code,
+
+                  Products_id,
+
+                  Products_Name,
+
+                  Producers_Name,
+
+                  RoleEndReason,
+
+                  Units_Id,
+
+--                ValueDate,
+
+                  OldNew
+
+         ORDER BY Zones_Name,Channels_Name,Producers_Code,Units_Id;
+
+      
+
+       ELSE
+
+         OPEN qryData FOR  SELECT
+
+                Zones_Name,
+
+                Branches_Id,
+
+                branches_name(Branches_Id),
+
+                Channels_Name,
+
+                Producers_Code,EProducers_Code,
+
+                Producers_Name,
+
+                RoleEndReason,
+
+                Products_id,
+
+                Products_Name,
+
+                Units_Id,
+
+--                ValueDate,
+
+                SUM(Coalesce(Commision,0)),
+
+                SUM(Coalesce(Commision_Local,0)),
+
+                SUM(Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(PayedCommision_Local,0)),
+
+                SUM(Coalesce(Commision,0) + Coalesce(PayedCommision,0)),
+
+                SUM(Coalesce(Commision_Local,0) + Coalesce(PayedCommision_Local,0)),
+
+                oldNew
+
+         FROM TMP_RPT_0209DATA tblRpt
+
+         GROUP BY Zones_Name,
+
+                  Branches_Id,
+
+                  branches_name(Branches_Id),
+
+                  Channels_Name,
+
+                  Producers_Code,EProducers_Code,
+
+                  Products_id,
+
+                  Products_Name,
+
+                  Producers_Name,
+
+                  RoleEndReason,
+
+                  Units_Id,
+
+--                ValueDate,
+
+                  OldNew
+
+         ORDER BY Zones_Name,Channels_Name,Producers_Code,Units_Id;
+
+      
+
+    END IF;
+
+  END IF;
+
+ 
+
+END;
